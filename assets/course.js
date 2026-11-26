@@ -1314,7 +1314,7 @@ const COURSE_VIDEOS={
  dalio:{id:'PHe0bXAIuk0',title:'Ray Dalio · 经济机器是怎样运行的',lang:'en',caption:'zh-Hans',source:'https://www.economicprinciples.org/how-the-economic-machine-works/',task:'观察“支出、收入、信贷”如何形成反馈；周期长度是分析框架，不能据此机械择时。'},
  fed:{id:'iGz2uWl-kGc',title:'小Lin说 · 美联储与美元体系',lang:'zh',caption:'zh-Hans',source:'https://www.youtube.com/watch?v=iGz2uWl-kGc',task:'区分政策利率、资产负债表与财政支出，写出它们各自的传导渠道。'},
  bond1:{id:'hyc8h5T76BE',title:'MIT · Fixed-Income Securities I',lang:'en',caption:'en',source:'https://ocw.mit.edu/courses/15-401-finance-theory-i-fall-2008/resources/part-i-of-fixed-income-securities/',task:'用现金流折现解释：票息不变时，为什么市场收益率上升、现有债券价格下降。',transcript:true},
- bond2:{id:'yrmqYNvvIzs',title:'MIT · Fixed-Income Securities II',lang:'en',caption:'en',source:'https://ocw.mit.edu/courses/15-401-finance-theory-i-fall-2008/resources/part-ii-of-fixed-income-securities/',task:'分清即期、远期和到期收益率；远期利率包含风险溢价，不能直接当作预测。',transcript:true},
+ bond2:{id:'yrmqYNvvIzs',title:'MIT · Fixed-Income Securities II',lang:'en',caption:'en',subtitledEdition:{embedUrl:'https://player.bilibili.com/player.html?bvid=BV1aR4y1p72c&page=5&autoplay=0&danmaku=0',url:'https://www.bilibili.com/video/BV1aR4y1p72c/?p=5'},source:'https://ocw.mit.edu/courses/15-401-finance-theory-i-fall-2008/resources/part-ii-of-fixed-income-securities/',task:'分清即期、远期和到期收益率；远期利率包含风险溢价，不能直接当作预测。',transcript:true},
  bond3:{id:'AtT59jxU9es',title:'MIT · Fixed-Income Securities III',lang:'en',caption:'en',source:'https://ocw.mit.edu/courses/15-401-finance-theory-i-fall-2008/resources/part-iii-of-fixed-income-securities/',task:'比较债券现值、久期与凸性，再拖动本章计算器验证一阶近似的误差。',transcript:true},
  val1:{id:'znmQ7oMiQrM',title:'Damodaran · Introduction to Valuation',lang:'en',caption:'en',source:'https://pages.stern.nyu.edu/~adamodar/New_Home_Page/webcastvalonline.htm',task:'列出估值中的偏见、不确定性和复杂性；写清“好公司”和“合适的买入价格”之间的区别。'},
  val2:{id:'8vYQpWXQ5hE',title:'Damodaran · Intrinsic Value',lang:'en',caption:'en',source:'https://pages.stern.nyu.edu/~adamodar/New_Home_Page/webcastvalonline.htm',task:'区分企业价值与股权价值，理解现金流、增长和风险之间的联系。'},
@@ -1587,9 +1587,17 @@ function renderGraph(el){
 }
 function videoBlock(key){
  const v=COURSE_VIDEOS[key];if(!v)return '';
+ const subtitled=v.subtitledEdition;
  const pref=readCaptionPreference();
- const origin=/^https?:$/.test(location.protocol)?'&amp;origin='+encodeURIComponent(new URL(location.href).origin):'';
- return `<section class="point-video" data-video-key="${key}"><div class="video-heading"><span class="mtype t-embed">${v.lang==='en'?'英文课程':'中文讲解'}</span><h5>${esc(v.title)}</h5></div><p>${esc(v.task)}</p><div class="embedded-video"><iframe loading="lazy" src="https://www.youtube-nocookie.com/embed/${v.id}?enablejsapi=1&amp;playsinline=1&amp;rel=0&amp;cc_load_policy=1&amp;cc_lang_pref=${pref}&amp;hl=zh-CN${origin}" title="${esc(v.title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><div class="video-tools"><button type="button" class="btn caption-btn" data-caption="zh-Hans" aria-pressed="${pref==='zh-Hans'}">中文字幕</button><button type="button" class="btn caption-btn" data-caption="en" aria-pressed="${pref==='en'}">English CC</button><span class="caption-status" role="status">播放后将检查${pref==='en'?'英文':'中文'}字幕</span><a href="${esc(v.source)}" target="_blank" rel="noopener noreferrer">${v.transcript?'原课程与英文逐字稿':'原课程'}</a></div></section>`;
+ const origin=/^https?:$/.test(location.protocol)?'&origin='+encodeURIComponent(new URL(location.href).origin):'';
+ const embedUrl=subtitled?.embedUrl||`https://www.youtube-nocookie.com/embed/${v.id}?enablejsapi=1&playsinline=1&rel=0&cc_load_policy=1&cc_lang_pref=${pref}&hl=zh-CN${origin}`;
+ const captionControls=subtitled
+  ?`<a href="${esc(subtitled.url)}" target="_blank" rel="noopener noreferrer">在 B 站打开中文字幕版</a>`
+  :`<button type="button" class="btn caption-btn" data-caption="zh-Hans" aria-pressed="${pref==='zh-Hans'}">中文字幕</button><button type="button" class="btn caption-btn" data-caption="en" aria-pressed="${pref==='en'}">English CC</button><span class="caption-status" role="status">播放后将检查${pref==='en'?'英文':'中文'}字幕</span>`;
+ const originalLabel=subtitled?'MIT 原视频与英文逐字稿':v.transcript?'原课程与英文逐字稿':'原课程';
+ const title=subtitled?`${v.title}（中文字幕版）`:v.title;
+ const langLabel=subtitled?'中文字幕版':v.lang==='en'?'英文课程':'中文讲解';
+ return `<section class="point-video"${subtitled?'':` data-video-key="${key}"`}><div class="video-heading"><span class="mtype t-embed">${langLabel}</span><h5>${esc(v.title)}</h5></div><p>${esc(v.task)}</p><div class="embedded-video"><iframe loading="lazy" src="${esc(embedUrl)}" title="${esc(title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><div class="video-tools">${captionControls}<a href="${esc(v.source)}" target="_blank" rel="noopener noreferrer">${originalLabel}</a></div></section>`;
 }
 function caseBlock(key){return (POINT_CASES[key]||[]).map(([t,body,source])=>`<aside class="stock-case"><h5>${esc(t)}</h5><p>${esc(body)}</p>${source?`<a class="source-link" href="${stockSource[source][1]}" target="_blank" rel="noopener noreferrer">${stockSource[source][0]}</a>`:''}</aside>`).join('');}
 function chartBlock(key){const c=Ref.CHARTS[key];return c?`<figure class="chart-box"><figcaption><b>${c.t}</b><span>${c.n||''}</span></figcaption><div class="chart-body" data-ref-chart="${key}"></div></figure>`:'';}
