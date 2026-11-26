@@ -218,3 +218,5 @@ body{font-size:1rem;line-height:1.8}.bg-glow{z-index:-1}#sidebar{display:block;p
 #hero .course-subtitle{display:block;font-size:clamp(1rem,2.2vw,1.4rem);line-height:1.55;font-weight:600;margin:0 0 1.25rem}
 .directory-stage,.chapter-quiz{scroll-margin-top:5.5rem}
 .topic-sources{margin-top:1rem;font-size:.88rem}.topic-sources summary{color:var(--p2);cursor:pointer}.topic-sources li{margin:.4rem 0}.topic-sources small{display:block;color:var(--muted)}
+
+.caption-btn[aria-pressed="true"]{border-color:var(--p2);color:var(--p2)}

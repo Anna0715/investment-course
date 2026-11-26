@@ -1403,6 +1403,114 @@ const POINT_CASES={
 };
 
 'use strict';
+const captionPreferenceKey='investment-course-caption-language';
+function readCaptionPreference(){
+ try{return localStorage.getItem(captionPreferenceKey)==='en'?'en':'zh-Hans';}catch{return 'zh-Hans';}
+}
+function matchesCaptionLanguage(code,language){
+ return String(code||'').toLowerCase().split('-')[0]===language.split('-')[0];
+}
+function captionSelection(tracks,translations,language,original){
+ const choices=tracks.filter(t=>matchesCaptionLanguage(t.languageCode,language));
+ const native=choices.find(t=>t.languageCode===language)||choices.find(t=>language==='zh-Hans'&&t.languageCode==='zh-CN')||choices[0];
+ if(native)return {track:native,translated:false};
+ const target=translations.find(t=>t.languageCode===language)||translations.find(t=>matchesCaptionLanguage(t.languageCode,language));
+ const sources=tracks.filter(t=>t.isTranslatable!==false);
+ const source=sources.find(t=>matchesCaptionLanguage(t.languageCode,original)&&t.kind!=='asr')||sources.find(t=>matchesCaptionLanguage(t.languageCode,original))||sources[0];
+ return source&&target?{track:{...source,translationLanguage:target},translated:true}:null;
+}
+let captionSdkPromise;
+function captionSdk(){
+ if(window.YT?.Player)return Promise.resolve(window.YT);
+ if(!captionSdkPromise)captionSdkPromise=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');
+  let timer;
+  function loaded(){
+   clearTimeout(timer);resolve(window.YT);
+  }
+  function failed(){
+   clearTimeout(timer);captionSdkPromise=null;script.remove();reject(new Error('Player API unavailable'));
+  }
+  window.onYouTubeIframeAPIReady=loaded;
+  timer=setTimeout(failed,15000);
+  script.src='https://www.youtube.com/iframe_api';script.onerror=failed;
+  document.head.appendChild(script);
+ });
+ return captionSdkPromise;
+}
+let chapterPlayers=[];
+function connectCaptionPlayer(block){
+ const frame=block.querySelector('iframe'),status=block.querySelector('.caption-status');
+ let player,ready=false,disposed=false,timer=0,attempt=0,done=false,playing=false,lastRequest=-20;
+ let language=readCaptionPreference();
+ const label=()=>language==='en'?'英文':'中文';
+ const say=message=>{if(status.textContent!==message)status.textContent=message;};
+ function showButtons(){
+  for(const button of block.querySelectorAll('[data-caption]'))button.setAttribute('aria-pressed',String(button.dataset.caption===language));
+ }
+ function check(){
+  clearTimeout(timer);
+  if(disposed||done||!ready)return;
+  const tracks=player.getOption?.('captions','tracklist')||[];
+  const translations=player.getOption?.('captions','translationLanguages')||[];
+  const current=player.getOption?.('captions','track');
+  const currentCode=current?.translationLanguage?.languageCode||current?.languageCode;
+  if(matchesCaptionLanguage(currentCode,language)){
+   done=true;say(current.translationLanguage?'已开启'+label()+'自动翻译':'已开启'+label()+'字幕');return;
+  }
+  const selection=captionSelection(tracks,translations,language,COURSE_VIDEOS[block.dataset.videoKey].lang);
+  if(selection&&attempt-lastRequest>=6){
+   lastRequest=attempt;
+   player.setOption('captions','track',selection.track);
+  }
+  if(!playing)return;
+  if(++attempt<30){timer=setTimeout(check,450);return;}
+  say('播放器未确认'+label()+'字幕。可在视频的「设置 → 字幕」中选择语言或自动翻译。');
+ }
+ function startChecking(){
+  if(disposed||done||!ready)return;
+  if(!player.getOptions?.('captions')?.length)player.loadModule?.('captions');
+  check();
+ }
+ function refresh(){
+  clearTimeout(timer);done=false;attempt=0;lastRequest=-20;showButtons();
+  say(playing?'正在切换'+label()+'字幕…':'播放后将检查'+label()+'字幕');
+  startChecking();
+ }
+ function click(event){
+  const button=event.target.closest('[data-caption]');if(!button)return;
+  language=button.dataset.caption;
+  try{localStorage.setItem(captionPreferenceKey,language);}catch{}
+  if(!player)attach();
+  refresh();
+ }
+ let connecting=false;
+ async function attach(){
+  if(connecting||disposed||player)return;
+  connecting=true;
+  try{
+   const yt=await captionSdk();if(disposed||!frame.isConnected)return;
+   player=new yt.Player(frame,{events:{
+    onReady:event=>{player=event.target;ready=true;playing=player.getPlayerState()===1;startChecking();},
+    onStateChange:event=>{playing=event.data===1;if(playing&&attempt<30)startChecking();},
+    onApiChange:()=>{if(attempt<30)check();},
+    onError:()=>{clearTimeout(timer);done=true;say('原视频暂时无法播放，请打开原课程。');}
+   }});
+  }catch{if(!disposed)say('字幕控制未连接。可使用播放器内的「设置 → 字幕」。');}
+  finally{connecting=false;}
+ }
+ showButtons();block.addEventListener('click',click);attach();
+ return ()=>{disposed=true;clearTimeout(timer);block.removeEventListener('click',click);player?.destroy?.();};
+}
+function disconnectCaptionPlayers(){
+ for(const cleanup of chapterPlayers)cleanup();
+ chapterPlayers=[];
+}
+function mountCaptionPlayers(){
+ for(const block of document.querySelectorAll('[data-video-key]'))chapterPlayers.push(connectCaptionPlayer(block));
+}
+
+'use strict';
 const chapterById=Object.fromEntries(Ref.MODULES.map(m=>[m.id,m]));
 const contentFixes={
  'us02y:1':'2Y 收益率体现未来短期利率的平均预期和期限溢价。它与当前政策利率的差，只能提示曲线如何定价，<b>不能直接除以 25bp 得到降息次数</b>。具体会议路径应结合联邦基金期货、SOFR 或 OIS，并明确风险中性定价的限制。',
@@ -1477,7 +1585,12 @@ function renderGraph(el){
  Ref.MODULES.forEach(m=>m.links.forEach(l=>{const a=pos[l],b=pos[m.id];if(!a||!b)return;const same=a.ci===b.ci,x1=a.x+(same?-74:74),x2=b.x-74,mx=same?x1-38:(x1+x2)/2;edges.push({from:l,to:m.id,el:S('path',{d:`M${x1},${a.y}C${mx},${a.y} ${mx},${b.y} ${x2},${b.y}`,class:'kg-edge'},eg)});}));
  for(const m of Ref.MODULES){const p=pos[m.id],g=S('a',{href:moduleUrl(m.id),class:'kg-node',transform:`translate(${p.x-74},${p.y-15})`,'aria-label':m.code+' '+m.title},ng);S('rect',{width:148,height:30,rx:9},g);TX(g,9,19.5,m.code,'start','kg-code');TX(g,42,19.5,m.short,'start','kg-t');const on=()=>{svg.classList.add('focus');edges.forEach(e=>{e.el.classList.toggle('hl',e.to===m.id||e.from===m.id);e.el.classList.toggle('out',e.from===m.id);});},off=()=>{svg.classList.remove('focus');edges.forEach(e=>e.el.classList.remove('hl','out'));};g.addEventListener('mouseenter',on);g.addEventListener('focus',on);g.addEventListener('mouseleave',off);g.addEventListener('blur',off);}
 }
-function videoBlock(key){const v=COURSE_VIDEOS[key];if(!v)return '';return `<section class="point-video" data-video-key="${key}"><div class="video-heading"><span class="mtype t-embed">${v.lang==='en'?'英文课程':'中文讲解'}</span><h5>${esc(v.title)}</h5></div><p>${esc(v.task)}</p><div class="embedded-video"><iframe loading="lazy" src="https://www.youtube-nocookie.com/embed/${v.id}?rel=0&cc_load_policy=1&cc_lang_pref=${v.caption}&hl=zh-CN" title="${esc(v.title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><div class="video-tools"><span>${v.caption==='en'?'已请求显示英文字幕':'优先请求中文字幕'}</span><button class="btn caption-btn" data-caption="zh-Hans">中文字幕</button><button class="btn caption-btn" data-caption="en">English CC</button><a href="${esc(v.source)}" target="_blank" rel="noopener noreferrer">${v.transcript?'原课程与英文逐字稿':'原课程'}</a></div><small class="caption-help">字幕由原视频提供。英文课程未确认中文轨时默认请求英文；可在播放器 CC 中切换。平台无字幕或限制嵌入时，请打开原课程${v.transcript?'查看英文逐字稿':''}。</small></section>`;}
+function videoBlock(key){
+ const v=COURSE_VIDEOS[key];if(!v)return '';
+ const pref=readCaptionPreference();
+ const origin=/^https?:$/.test(location.protocol)?'&amp;origin='+encodeURIComponent(new URL(location.href).origin):'';
+ return `<section class="point-video" data-video-key="${key}"><div class="video-heading"><span class="mtype t-embed">${v.lang==='en'?'英文课程':'中文讲解'}</span><h5>${esc(v.title)}</h5></div><p>${esc(v.task)}</p><div class="embedded-video"><iframe loading="lazy" src="https://www.youtube-nocookie.com/embed/${v.id}?enablejsapi=1&amp;playsinline=1&amp;rel=0&amp;cc_load_policy=1&amp;cc_lang_pref=${pref}&amp;hl=zh-CN${origin}" title="${esc(v.title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><div class="video-tools"><button type="button" class="btn caption-btn" data-caption="zh-Hans" aria-pressed="${pref==='zh-Hans'}">中文字幕</button><button type="button" class="btn caption-btn" data-caption="en" aria-pressed="${pref==='en'}">English CC</button><span class="caption-status" role="status">播放后将检查${pref==='en'?'英文':'中文'}字幕</span><a href="${esc(v.source)}" target="_blank" rel="noopener noreferrer">${v.transcript?'原课程与英文逐字稿':'原课程'}</a></div></section>`;
+}
 function caseBlock(key){return (POINT_CASES[key]||[]).map(([t,body,source])=>`<aside class="stock-case"><h5>${esc(t)}</h5><p>${esc(body)}</p>${source?`<a class="source-link" href="${stockSource[source][1]}" target="_blank" rel="noopener noreferrer">${stockSource[source][0]}</a>`:''}</aside>`).join('');}
 function chartBlock(key){const c=Ref.CHARTS[key];return c?`<figure class="chart-box"><figcaption><b>${c.t}</b><span>${c.n||''}</span></figcaption><div class="chart-body" data-ref-chart="${key}"></div></figure>`:'';}
 function deeperReading(id){const l=byId[id];return `<details class="deep-reading" id="reading-${id}"><summary><span>${esc(l.title)}</span><small>深入阅读 · ${l.minutes} 分钟</small></summary><div class="reading-body"><p class="reading-goal">${esc(l.goal)}</p>${l.core.map(x=>`<p>${esc(x)}</p>`).join('')}<div class="formula">${esc(l.formula)}</div><div class="example"><b>推演算例 · 教学设定</b><p>${esc(l.example)}</p></div><p><b>常见误区：</b>${esc(l.pitfall)}</p><div class="chips">${l.prerequisites.map(pid=>chip(LESSON_CHAPTER[pid])).filter((v,i,a)=>a.indexOf(v)===i).join('')}</div><label for="note-${id}">我的学习笔记</label><textarea id="note-${id}" data-reading-note="${id}" placeholder="机制、证据、反例…">${esc(state.notes[id]?.text||'')}</textarea><span class="small muted" data-note-status="${id}">输入后自动保存到本机</span><div class="actions"><button class="btn ghost" data-complete="${id}">${state.completed[id]?'已完成精读':'标记精读完成'}</button>${bookmarkButton(id)}</div></div></details>`;}
@@ -1523,16 +1636,15 @@ navigateRender=function(keepScroll=false){
  if(legacyLesson){id=LESSON_CHAPTER[legacyLesson];view='module';state.lastLesson=legacyLesson;}
  let html;
  const renderers={home:()=>renderHome(),courses:()=>renderCourses(query),module:()=>renderChapter(id),map:()=>renderHome(),lab:()=>renderLab(id),history:()=>renderChapter('history'),resources:()=>pageHead('视频与原始资料','课程视频已放在对应知识点下方。点击目录进入章节，边学边看。')+renderDirectory(''),dictionary:()=>renderDictionary(),records:()=>renderRecords(query),settings:()=>renderSettings(),account:()=>renderAccount(query)};
- html=(renderers[view]||renderMissing)();$('#main').innerHTML=html+footer();
+ html=(renderers[view]||renderMissing)();disconnectCaptionPlayers();$('#main').innerHTML=html+footer();
  document.title=(view==='module'&&chapterById[id]?chapterById[id].title+' · ':'')+'投资 · 从宏观到技术';$('#breadcrumb').textContent=view==='module'&&chapterById[id]?chapterById[id].code+' '+chapterById[id].short:routeNames[view]||'学习路线';
  $$('[data-chapter-nav]').forEach(a=>{const active=a.dataset.chapterNav===(view==='module'?id:view==='history'?'history':'');a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
- if($('#reference-graph'))renderGraph($('#reference-graph'));if(view==='dictionary')updateDictionary();if(view==='lab')updateLab();mountReferenceCharts();updateShell();
+ if($('#reference-graph'))renderGraph($('#reference-graph'));if(view==='dictionary')updateDictionary();if(view==='lab')updateLab();mountReferenceCharts();mountCaptionPlayers();updateShell();
  if(keepScroll)window.scrollTo(0,pos);else{window.scrollTo(0,0);$('#main').focus({preventScroll:true});}
  let target=stage?$('#stage-'+stage.id):query.get('section')==='quiz'&&legacyLesson?$('#quiz-'+legacyLesson):query.get('section')==='practice'?$('#chapter-practice'):query.has('point')?$('#point-'+id+'-'+Number(query.get('point'))):legacyLesson?$('#reading-'+legacyLesson):null;
  if(target&&(!keepScroll||query.get('section')==='quiz'&&!authState.answersReady)){if(target.tagName==='DETAILS')target.open=true;requestAnimationFrame(()=>target.scrollIntoView({block:'start'}));}
 };
 document.addEventListener('change',e=>{if(!e.target.matches('[data-mastered]'))return;state.mastered??={};const key=e.target.dataset.mastered;if(e.target.checked)state.mastered[key]=true;else delete state.mastered[key];e.target.closest('.pt').classList.toggle('done',e.target.checked);persist();});
-document.addEventListener('click',e=>{const caption=e.target.closest('[data-caption]');if(!caption)return;const block=caption.closest('[data-video-key]'),frame=block.querySelector('iframe'),url=new URL(frame.src);url.searchParams.set('cc_load_policy','1');url.searchParams.set('cc_lang_pref',caption.dataset.caption);frame.src=url.href;toast(caption.dataset.caption==='en'?'已请求英文字幕；具体可用轨道以播放器为准。':'已请求中文字幕；若无中文轨，请切换 English CC。');});
 document.addEventListener('click',e=>{if(e.target.closest('.skip')){e.preventDefault();$('#main').focus();window.scrollTo(0,0);}});
 document.addEventListener('input',e=>{
  if(e.target.id==='chapter-search'){clearTimeout(window.chapterSearchTimer);const value=e.target.value;window.chapterSearchTimer=setTimeout(()=>{history.replaceState(null,'','#/courses'+(value?'?q='+encodeURIComponent(value):''));navigateRender(true);},180);}
