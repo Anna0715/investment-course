@@ -1539,7 +1539,7 @@ const LESSON_CHAPTER=Object.fromEntries(Object.entries(CHAPTER_LESSONS).flatMap(
 const COURSE_VIDEOS={
  oilSupply:{id:'ssssR1hxiTw',title:'小Lin说 · 石油与中东的百年历史',lang:'zh',source:'https://www.youtube.com/watch?v=ssssR1hxiTw',task:'看石油产区、运输与 OPEC 如何改变全球供应。观看时区分短期供应中断与长期产能变化。'},
  oilTerm:{id:'IWOllM4hzoY',title:'CME · WTI 升水与贴水',lang:'en',source:'https://www.youtube.com/watch?v=IWOllM4hzoY',task:'从报价牌找出近月与远月价格，自己算一次近减远价差；用下面的图对照。'},
- goldDrivers:{id:'B4jIyufgy-s',title:'小Lin说 · 一口气了解黄金',lang:'zh',source:'https://www.youtube.com/watch?v=B4jIyufgy-s',task:'用实际利率、美元与避险需求三条线梳理讲解，并记下哪些阶段这些因素会互相抵消。'},
+ goldDrivers:{id:'B4jIyufgy-s',title:'小Lin说 · 一口气了解黄金',lang:'zh',embeddedEdition:{embedUrl:'https://player.bilibili.com/player.html?bvid=BV19r421u7af&autoplay=0&danmaku=0',url:'https://www.bilibili.com/video/BV19r421u7af/'},source:'https://www.youtube.com/watch?v=B4jIyufgy-s',task:'用实际利率、美元与避险需求三条线梳理讲解，并记下哪些阶段这些因素会互相抵消。'},
 
  "cpi":{"id": "AaR1mPrdbTc", "title": "Khan Academy · 如何衡量通胀", "lang": "en", "caption": "en", "source": "https://www.youtube.com/watch?v=AaR1mPrdbTc", "task": "用同一篮子商品比较两个时期的总成本，再判断哪些变化会进入物价指数。"},
  "deflation":{"id": "FPh6EDv0Eew", "title": "Khan Academy · 通缩", "lang": "en", "caption": "en", "source": "https://www.youtube.com/watch?v=FPh6EDv0Eew", "task": "把单件商品降价与总体价格水平持续下降分开，观察固定面值债务的实际负担。"},
@@ -1844,15 +1844,16 @@ function videoBlock(key){
  const v=COURSE_VIDEOS[key];if(!v)return '';
  const pref=readCaptionPreference();
  const subtitled=v.subtitledEdition;
+ const edition=subtitled||v.embeddedEdition;
  const origin=/^https?:$/.test(location.protocol)?'&origin='+encodeURIComponent(new URL(location.href).origin):'';
- const embedUrl=subtitled?.embedUrl||`https://www.youtube-nocookie.com/embed/${v.id}?enablejsapi=1&playsinline=1&rel=0&cc_load_policy=1&cc_lang_pref=${pref}&hl=zh-CN${origin}`;
- const captionControls=subtitled
-  ?`<a href="${esc(subtitled.url)}" target="_blank" rel="noopener noreferrer">在 B 站打开中文字幕版</a>`
+ const embedUrl=edition?.embedUrl||`https://www.youtube-nocookie.com/embed/${v.id}?enablejsapi=1&playsinline=1&rel=0&cc_load_policy=1&cc_lang_pref=${pref}&hl=zh-CN${origin}`;
+ const captionControls=edition
+  ?`<a href="${esc(edition.url)}" target="_blank" rel="noopener noreferrer">在 B 站打开${subtitled?'中文字幕版':''}</a>`
   :`<button type="button" class="btn caption-btn" data-caption="zh-Hans" aria-pressed="${pref==='zh-Hans'}">中文字幕</button><button type="button" class="btn caption-btn" data-caption="en" aria-pressed="${pref==='en'}">English CC</button><span class="caption-status" role="status">播放后将检查${pref==='en'?'英文':'中文'}字幕</span>`;
  const originalLabel=subtitled?'MIT 原视频与英文逐字稿':v.transcript?'原课程与英文逐字稿':'原课程';
  const title=subtitled?`${v.title}（中文字幕版）`:v.title;
  const langLabel=subtitled?'中文字幕版':v.lang==='en'?'英文课程':'中文讲解';
- return `<section class="point-video" data-video-key="${key}"><div class="video-heading"><span class="mtype t-embed">${langLabel}</span><h5>${esc(v.title)}</h5></div><p>${esc(v.task)}</p><div class="embedded-video"><iframe loading="lazy" src="${esc(embedUrl)}" title="${esc(title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><div class="video-tools">${captionControls}<a href="${esc(v.source)}" target="_blank" rel="noopener noreferrer">${originalLabel}</a></div></section>`;
+ return `<section class="point-video" data-video-key="${key}"><div class="video-heading"><span class="mtype t-embed">${langLabel}</span><h5>${esc(v.title)}</h5></div><p>${esc(v.task)}</p><div class="embedded-video"><iframe loading="lazy" src="${esc(embedUrl)}" title="${esc(title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><div class="video-tools">${captionControls}<a href="${esc(v.source)}" target="_blank" rel="noopener noreferrer">${originalLabel}</a></div></section>`;
 }
 function caseBlock(key){return (POINT_CASES[key]||[]).map(([t,body,source])=>`<aside class="stock-case"><h5>${esc(t)}</h5><p>${esc(body)}</p>${source?`<a class="source-link" href="${stockSource[source][1]}" target="_blank" rel="noopener noreferrer">${stockSource[source][0]}</a>`:''}</aside>`).join('');}
 function chartBlock(key){const c=Ref.CHARTS[key];return c?`<figure class="chart-box"><figcaption><b>${c.t}</b><span>${c.n||''}</span></figcaption><div class="chart-body" data-ref-chart="${key}"></div></figure>`:'';}
